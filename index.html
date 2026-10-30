@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- 响应式 viewport：手机端适配的关键；viewport-fit=cover 让 iOS 刘海屏的安全区变量生效 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="个人学习记录站：Markdown 笔记、AI 学习助手与开发者工具箱，纯前端 + localStorage。" />
+  <meta name="theme-color" content="#F5F7FA" />
+  <meta name="color-scheme" content="light" />
+  <title>学习笔记 | 我的个人学习记录</title>
+  <style>
+    /* 首屏占位动画：JS 包还没加载完时也有动态效果，和 Vue 的开屏动画无缝衔接 */
+    .boot {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      /* 与应用背景同一个中性浅灰，加载过程不闪烁 */
+      background: #F5F7FA;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    }
+    .boot .ring {
+      width: 56px;
+      height: 56px;
+      border-radius: 999px;
+      border: 4px solid rgba(148, 163, 184, 0.18);
+      border-top-color: #93C5FD;
+      animation: bootSpin 0.9s linear infinite;
+      margin: 0 auto;
+    }
+    .boot .txt {
+      margin-top: 18px;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: #6b7280;
+      animation: bootFade 1.6s ease-in-out infinite;
+    }
+    @keyframes bootSpin { to { transform: rotate(360deg); } }
+    @keyframes bootFade { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <!-- Vue 应用挂载点；里面是应用加载前的占位动画，挂载后会自动被替换 -->
+  <div id="app">
+    <div class="boot">
+      <div>
+        <div class="ring"></div>
+        <div class="txt">正在打开学习实验室…</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+/* main.css - 全局样式
+   设计分工（本次重构的核心）：
+   1) 内容层（卡片/按钮/文字/表单）= 静态，只有 0.15s 的颜色过渡，不浮动、不缩放、不扫光
+   2) 背景层（极光 + 网格 + 光束 + 粒子 + 光斑）= 动态明显，且只出现在内容之外的空白处
+   3) 开屏层 = 独立的 Canvas 动画，播完即销毁
+   4) 双端：所有交互尺寸按手机优先（44px 触摸目标），布局用 dvh + 安全区
+*/
+
+/* Tailwind 三层指令，必须保留 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========== 基础 ========== */
+html {
+  -webkit-text-size-adjust: 100%; /* 禁止横屏时 iOS 自动放大字号 */
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply text-ink-700 antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  /* 静态中性底色：内容区永远不闪；上面的极光层负责"动" */
+  background-color: #F5F7FA;
+  min-height: 100dvh;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ========== 内容层：静态组件 ========== */
+@layer components {
+  /* 页面容器：手机上留 16px，平板/电脑留 24px */
+  .page-wrap {
+    @apply max-w-6xl mx-auto px-4 sm:px-6 pb-14 pt-5 sm:pt-6;
+  }
+
+  /* 卡片：纯白不透明（把背景动效挡在外面），只留极轻投影 */
+  .card {
+    @apply bg-white border border-ink-200 rounded-2xl;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  /* 可点击卡片：hover 只改边框和阴影，不做位移/缩放（内容层保持静止） */
+  .card-link {
+    @apply transition-[border-color,box-shadow] duration-150;
+  }
+  @media (hover: hover) {
+    .card-link:hover {
+      @apply border-primary/45;
+      box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.25);
+    }
+  }
+
+  /* 区块标题 */
+  .eyebrow {
+    @apply text-[11px] sm:text-xs font-mono uppercase tracking-[0.18em] text-ink-400;
+  }
+  .section-title {
+    @apply text-base sm:text-lg font-bold text-ink-900 flex items-center gap-2;
+  }
+  .section-title::before {
+    content: '';
+    @apply w-1 h-[18px] rounded-full bg-primary;
+  }
+
+  /* 按钮基类：44px 最小触摸高度 */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 sm:px-5 py-2.5
+           rounded-xl text-sm font-semibold whitespace-nowrap select-none
+           transition-[background-color,color,border-color] duration-150 active:opacity-85;
+  }
+  /* 实心主按钮：纯蓝底白字，对比度 4.9:1，绝不会出现"白字看不清"（用法：class="btn btn-primary"） */
+  .btn-primary {
+    @apply bg-primary text-white;
+  }
+  @media (hover: hover) {
+    .btn-primary:hover {
+      @apply bg-primary-dark;
+    }
+  }
+  /* 次级按钮：白底描边 */
+  .btn-soft {
+    @apply bg-white text-ink-700 border border-ink-300;
+  }
+  @media (hover: hover) {
+    .btn-soft:hover {
+      @apply text-primary border-primary/60;
+    }
+  }
+  /* 弱按钮：虚线边框，用于"重放动画"这类玩票操作 */
+  .btn-ghost {
+    @apply bg-transparent text-ink-500 border border-dashed border-ink-300;
+  }
+  @media (hover: hover) {
+    .btn-ghost:hover {
+      @apply text-primary border-primary/50;
+    }
+  }
+  /* 小尺寸变体 */
+  .btn-sm {
+    @apply min-h-[38px] py-1.5 px-3.5 text-[13px] rounded-lg;
+  }
+
+  /* 分类/筛选胶囊：横向可滚动，选中态用实心蓝（清晰可辨） */
+  .chip {
+    @apply inline-flex items-center gap-1 min-h-[38px] px-3.5 py-1.5 rounded-full text-[13px] sm:text-sm
+           bg-white border border-ink-200 text-ink-500
+           transition-[background-color,color,border-color] duration-150;
+  }
+  @media (hover: hover) {
+    .chip:hover {
+      @apply border-ink-300 text-ink-700;
+    }
+  }
+  .chip-on {
+    @apply bg-primary text-white border-primary;
+  }
+
+  /* 表单控件：静态，聚焦时只加一圈细描边 */
+  .field {
+    @apply w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-white border border-ink-200 text-sm text-ink-700
+           outline-none transition-[border-color,box-shadow] duration-150;
+  }
+  .field:focus {
+    @apply border-primary;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  }
+  .field::placeholder {
+    @apply text-ink-400;
+  }
+  .label {
+    @apply block text-[13px] font-medium text-ink-700 mb-1.5;
+  }
+
+  /* 小徽标（分类标签、数量） */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-ink-100 text-ink-500;
+  }
+  .badge-primary {
+    @apply inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-primary text-white;
+  }
+
+  /* 危险操作按钮：删除用，红字白底描边（比整块红更克制） */
+  .btn-danger {
+    @apply bg-white text-red-600 border border-red-200;
+  }
+  @media (hover: hover) {
+    .btn-danger:hover {
+      @apply bg-red-50 border-red-300;
+    }
+  }
+
+  /* 右下角悬浮按钮（回到顶部等）：固定定位 + 安全区，手机上不挡手势 */
+  .fab {
+    @apply fixed z-40 right-4 sm:right-6 w-11 h-11 grid place-items-center rounded-full
+           bg-primary text-white text-lg shadow-lg shadow-primary/25
+           transition-[background-color,opacity] duration-200 active:opacity-80;
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (hover: hover) {
+    .fab:hover {
+      @apply bg-primary-dark;
+    }
+  }
+}
+
+/* 只保留颜色过渡，禁掉触屏上 hover 造成的"粘住"状态 */
+@media (hover: none) {
+  .card-link,
+  .chip,
+  .btn,
+  .fab {
+    transition: none;
+  }
+}
+
+/* ========== 背景层：动效集中在这里 ========== */
+
+/* 极光团：三团低饱和柔光缓慢漂移 */
+.aurora {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(56px) saturate(115%);
+  will-change: transform;
+}
+.aurora-blue {
+  background: radial-gradient(circle at 50% 50%, rgba(125, 185, 252, 0.95), rgba(125, 185, 252, 0) 70%);
+}
+.aurora-violet {
+  background: radial-gradient(circle at 50% 50%, rgba(186, 168, 252, 0.9), rgba(186, 168, 252, 0) 70%);
+}
+.aurora-mint {
+  background: radial-gradient(circle at 50% 50%, rgba(140, 238, 196, 0.85), rgba(140, 238, 196, 0) 70%);
+}
+
+/* 缓慢平移的网格：让空白处有"在流动"的错觉 */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(80, 110, 170, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(80, 110, 170, 0.16) 1px, transparent 1px),
+    linear-gradient(to right, rgba(130, 100, 200, 0.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(130, 100, 200, 0.11) 1px, transparent 1px);
+  background-size: 46px 46px, 46px 46px, 230px 230px, 230px 230px;
+  /* 顶部渐隐，避免网格压住首屏视觉 */
+  -webkit-mask-image: radial-gradient(ellipse 130% 90% at 50% 0%, #000 42%, transparent 86%);
+  mask-image: radial-gradient(ellipse 130% 90% at 50% 0%, #000 42%, transparent 86%);
+}
+
+/* 斜向光束（transform 由 beam 关键帧控制，这里不写 transform） */
+.beam {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 30%;
+  height: 140%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9) 45%, rgba(205, 228, 255, 0.6) 55%, transparent);
+  filter: blur(24px);
+}
+
+/* 鼠标跟随光斑：只在内容之外的空白处可见（内容卡片是不透明白底） */
+#cursor-glow {
+  position: fixed;
+  width: 420px;
+  height: 420px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle,
+    rgba(96, 165, 250, 0.30),
+    rgba(165, 180, 252, 0.18) 42%,
+    transparent 70%);
+  transition: opacity 0.35s ease;
+}
+
+/* 点击涟漪 */
+.click-ripple {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 60;
+  border: 2px solid rgba(96, 165, 250, 0.6);
+  animation: ripple-out 0.7s ease-out forwards;
+}
+@keyframes ripple-out {
+  to {
+    transform: scale(7);
+    opacity: 0;
+  }
+}
+
+/* ========== 进场与转场（一次性、无位移，尽量不打扰阅读） ========== */
+.reveal {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.reveal.is-in {
+  opacity: 1;
+}
+
+.page-enter-active {
+  transition: opacity 0.18s ease;
+}
+.page-leave-active {
+  transition: opacity 0.12s ease;
+  position: absolute;
+  width: 100%;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+
+/* 移动端横向滚动条隐藏（分类胶囊条用） */
+.no-bar {
+  scrollbar-width: none;
+}
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* iOS 安全区 */
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ========== 无障碍：系统要求减少动效时，背景层全部静止 ========== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal {
+    opacity: 1;
+  }
+  #cursor-glow,
+  .click-ripple,
+  .beam {
+    display: none;
+  }
+}
+
+/* ========== Markdown 渲染内容样式（内容层，纯静态） ========== */
+.markdown-body {
+  @apply text-[15px] leading-7 text-ink-700 break-words;
+}
+.markdown-body h1 {
+  @apply mt-8 mb-4 text-xl sm:text-2xl font-bold text-ink-900 border-b border-ink-200 pb-2;
+}
+.markdown-body h2 {
+  @apply mt-7 mb-3 text-lg sm:text-xl font-bold text-ink-900;
+}
+.markdown-body h3 {
+  @apply mt-5 mb-2 text-base sm:text-lg font-semibold text-ink-900;
+}
+.markdown-body p {
+  @apply my-3;
+}
+.markdown-body ul {
+  @apply my-3 pl-5 sm:pl-6 list-disc;
+}
+.markdown-body ol {
+  @apply my-3 pl-5 sm:pl-6 list-decimal;
+}
+.markdown-body a {
+  @apply text-primary underline decoration-primary/30 underline-offset-2;
+}
+.markdown-body blockquote {
+  @apply my-4 pl-4 border-l-4 border-primary-100 bg-primary-50 text-ink-500 rounded-r-lg;
+}
+.markdown-body table {
+  @apply my-4 w-full border-collapse text-[13px] sm:text-sm block overflow-x-auto;
+}
+.markdown-body th,
+.markdown-body td {
+  @apply border border-ink-200 px-2.5 sm:px-3 py-2 text-left whitespace-nowrap;
+}
+.markdown-body th {
+  @apply bg-ink-100 font-semibold;
+}
+/* 行内代码 */
+.markdown-body :not(pre) > code {
+  @apply px-1.5 py-0.5 mx-0.5 rounded bg-ink-100 text-primary-dark text-[13px] font-mono break-all;
+}
+/* 代码块（highlight.js 高亮后）：手机上可横向滑动 */
+.markdown-body pre {
+  @apply my-4 p-3 sm:p-4 rounded-xl bg-[#0F172A] overflow-x-auto text-[12.5px] sm:text-[13px] leading-6;
+  -webkit-overflow-scrolling: touch;
+}
+.markdown-body pre code {
+  @apply font-mono text-gray-100 whitespace-pre;
+}
+
+/* ========== highlight.js 配色（配合深色代码块） ========== */
+.hljs-keyword, .hljs-selector-tag { color: #F472B6; }
+.hljs-string, .hljs-attr { color: #A5D6FF; }
+.hljs-number, .hljs-literal { color: #FFAB70; }
+.hljs-title, .hljs-section { color: #79C0FF; }
+.hljs-comment { color: #8B949E; font-style: italic; }
+.hljs-tag { color: #7EE787; }
+.hljs-variable, .hljs-template-variable { color: #FDA4AF; }
+.hljs-built_in, .hljs-type { color: #D2A8FF; }
