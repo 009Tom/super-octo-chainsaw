@@ -25,6 +25,10 @@
         </span>
       </label>
 
+      <p v-if="siteRepoTip" class="mt-2.5 text-[12px] px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 leading-relaxed">
+        {{ siteRepoTip }}
+      </p>
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
         <div>
           <label class="label">GitHub 用户名</label>
@@ -120,7 +124,8 @@
         <button class="btn btn-ghost btn-sm" @click="selectAll">全选</button>
         <button class="btn btn-ghost btn-sm" @click="selectPending">只选待发布</button>
         <button class="btn btn-ghost btn-sm" @click="selected = []">清空</button>
-        <span class="chip self-center">{{ selected.length }} / {{ items.length }}</span>
+        <span class="chip self-center">勾选 {{ selected.length }} / {{ items.length }} 篇</span>
+        <span class="chip self-center" title="index.json 会写完整清单，不会把未勾选的老笔记挤掉">清单共 {{ onlineNotes.length }} 篇</span>
       </div>
 
       <!-- 草稿清单 -->
@@ -172,11 +177,15 @@
         <li>
           打开
           <a v-if="canTest" :href="uploadUrl" target="_blank" rel="noopener" class="text-primary underline">
-            GitHub 的上传页
+            {{ cfg.user }}/{{ cfg.repo }} 的上传页（已进到 {{ cfg.dir || 'notes' }} 目录）
           </a>
           <span v-else>GitHub 的 <em>Add file → Upload files</em></span>
-          ，把刚下载的文件整个拖进去。
+          ，把刚下载的 <code class="font-mono">.md</code> 和 <code class="font-mono">index.json</code> 一起拖进去。
+          <strong class="text-ink-900">不用手动新建文件</strong>：上传页会在你当前所在的目录里创建文件，
+          同名文件（比如上次的 index.json）会直接覆盖。
         </li>
+        <li>确认页面顶部显示的路径是 <code class="font-mono text-primary">{{ cfg.repo }} / {{ cfg.dir || 'notes' }}</code> 再提交，
+          传到仓库根目录的话网站是读不到的。</li>
         <li>点 <strong>Commit changes</strong>，回到网站刷新即可（GitHub 有约 5 分钟缓存，稍等就更新）。</li>
         <li>以后每次改笔记都是同样的三步；<strong>网站本身不需要重新部署</strong>。</li>
       </ol>
@@ -193,8 +202,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { getAllNotes } from '../utils/storage'
 import {
-  getRepoConfig, saveRepoConfig, isRepoReady, repoWebUrl, indexUrl,
-  fetchPublishedNotes, diagnose, CHANNELS
+  getRepoConfig, saveRepoConfig, isRepoReady, repoWebUrl, uploadWebUrl, indexUrl,
+  fetchPublishedNotes, diagnose, CHANNELS, DEFAULT_REPO_CONFIG
 } from '../utils/repo'
 import {
   withPublishState, buildBundle, bundleAsText, downloadText,
@@ -213,13 +222,29 @@ const testOk = ref(false)
 const exportHint = ref('')
 
 const ready = computed(() => isRepoReady(cfg.value))
+// 随代码打包的默认仓库（src/siteConfig.js）：它决定了访客能不能读到笔记
+const siteRepoTip = (() => {
+  const d = DEFAULT_REPO_CONFIG
+  if (!d.user || !d.repo) return ''
+  return `本站已内置发布仓库 ${d.user}/${d.repo}（写在 src/siteConfig.js，随代码打包），` +
+    '访客不需要任何配置就能读到已发布笔记。' +
+    (d.enabled ? '' : '但内置配置里没启用，需要你在下面勾选保存。')
+})()
 // 测试与诊断不该被“启用”勾选卡住：只填了用户名/仓库名就能跑
 const canTest = computed(() => !!(cfg.value.user && cfg.value.repo))
 const webUrl = computed(() => repoWebUrl(cfg.value))
 // 当前配置拼出来的清单地址（去掉会话参数，给人肉检查用）
 const sampleIndexUrl = computed(() => indexUrl(cfg.value).replace(/\?c=\d+$/, ''))
-const uploadUrl = computed(() => `${repoWebUrl(cfg.value)}?files=${encodeURIComponent(cfg.value.dir || 'notes')}`)
+const uploadUrl = computed(() => uploadWebUrl(cfg.value))
 const picked = computed(() => items.value.filter((it) => selected.value.includes(it.note.id)))
+// index.json 必须是「线上最终应该存在」的完整清单：本次勾选的 + 以前已经发布过的。
+// 只按勾选项生成清单的话，传上去会让老笔记从网站上全部消失。
+// status !== 'new' 就代表 published_map 里有记录，即仓库里已经有它的 .md 文件。
+const onlineNotes = computed(() =>
+  items.value
+    .filter((it) => selected.value.includes(it.note.id) || it.status !== 'new')
+    .map((it) => it.note)
+)
 
 onMounted(() => {
   items.value = withPublishState(getAllNotes())
@@ -284,24 +309,25 @@ function downloadOne(it) {
 
 function exportBundle() {
   const notes = picked.value.map((it) => it.note)
-  downloadFiles(buildBundle(notes))
+  downloadFiles(buildBundle(notes, onlineNotes.value))
   markPublished(notes)
   items.value = withPublishState(getAllNotes())
-  exportHint.value = `已导出 ${notes.length + 1} 个文件。如果浏览器拦了多文件下载，改用「下载成 1 个合并文件」。`
+  exportHint.value = `已导出 ${notes.length} 篇正文 + 1 份 index.json（清单含全部 ${onlineNotes.value.length} 篇，不会丢老笔记）。` +
+    '如果浏览器拦了多文件下载，改用「下载成 1 个合并文件」。'
 }
 
 function exportOneFile() {
   const notes = picked.value.map((it) => it.note)
-  downloadText(`publish-bundle-${new Date().toISOString().slice(0, 10)}.txt`, bundleAsText(notes))
+  downloadText(`publish-bundle-${new Date().toISOString().slice(0, 10)}.txt`, bundleAsText(notes, onlineNotes.value))
   markPublished(notes)
   items.value = withPublishState(getAllNotes())
-  exportHint.value = '合并文件里每段开头都标了文件名，照着新建即可。'
+  exportHint.value = `合并文件里有 ${notes.length} 篇正文和 1 份完整 index.json（共 ${onlineNotes.value.length} 篇），每段开头都标了文件名，照着新建即可。`
 }
 
 async function copyBundle() {
   try {
-    await navigator.clipboard.writeText(bundleAsText(picked.value.map((it) => it.note)))
-    exportHint.value = '发布包已复制到剪贴板。'
+    await navigator.clipboard.writeText(bundleAsText(picked.value.map((it) => it.note), onlineNotes.value))
+    exportHint.value = '发布包已复制到剪贴板（index.json 为完整清单）。'
   } catch {
     exportHint.value = '浏览器拒绝了剪贴板写入，请改用下载按钮。'
   }

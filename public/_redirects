@@ -1,0 +1,5 @@
+# Cloudflare Pages 单页应用回退规则（Vite 会把 public/ 下的文件原样拷进 dist/）
+# 本站 Vue Router 用的是 history 模式（createWebHistory），URL 里没有 # 号。
+# 直接访问 /notes、/tools 或在线上刷新页面时，服务器上并不存在对应的实体文件，
+# 若不回退到 index.html 就会 404。
+/* /index.html 200

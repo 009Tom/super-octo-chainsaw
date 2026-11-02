@@ -10,18 +10,20 @@
 //    同一会话内命中缓存（不重复请求），刷新页面重开会话就会拿到最新内容。
 // 5) 任何失败都不抛异常，而是返回 { ok:false, error }，让页面能优雅降级到本地草稿。
 
+import { SITE_REPO } from '../siteConfig'
+
 const CONFIG_KEY = 'repo_config_v1'
 
-// 默认配置：仓库留空 = 功能未启用，网站只用本地草稿，行为和以前完全一致
-export const DEFAULT_REPO_CONFIG = {
+/** 配置项的标准空值（写在最前面，下面的默认配置要用它做基底） */
+const DEFAULT_SHAPE = {
   enabled: false,
-  user: '',            // GitHub 用户名
-  repo: '',            // 仓库名（必须是 public 仓库）
-  branch: 'main',      // 分支
-  dir: 'notes',        // 笔记目录
-  indexFile: 'index.json', // 清单文件名
-  channel: 'direct',   // 拉取通道，见下方 CHANNELS
-  proxyPrefix: ''      // channel = custom 时用的代理前缀
+  user: '',
+  repo: '',
+  branch: 'main',
+  dir: 'notes',
+  indexFile: 'index.json',
+  channel: 'direct',
+  proxyPrefix: ''
 }
 
 /**
@@ -39,6 +41,16 @@ export const CHANNELS = [
   { id: 'custom', name: '自定义代理前缀（自建加速域名时用）' }
 ]
 
+// 默认配置来自 src/siteConfig.js（打包进网站，对所有访客都生效）。
+// 本机在发布页改过并保存的配置会覆盖它；user/repo 都为空时网站只用本地草稿。
+// 必须放在 CHANNELS 后面：const 声明之前是暂时死区，提前引用会直接报
+// ReferenceError: Cannot access 'CHANNELS' before initialization
+export const DEFAULT_REPO_CONFIG = {
+  ...DEFAULT_SHAPE,
+  ...(SITE_REPO || {}),
+  channel: CHANNELS.some((c) => c.id === (SITE_REPO || {}).channel) ? SITE_REPO.channel : 'direct'
+}
+
 // 公共测试文件：GitHub 官方仓库里永远存在的一个文件，用它探测“这条域名通不通”
 // 注意它跟你的仓库无关，所以能单独判断网络层还是配置层的问题
 const PROBE = { user: 'octocat', repo: 'Hello-World', branch: 'master', path: 'README' }
@@ -48,14 +60,24 @@ const SESSION_V = Date.now()
 
 // ========== 配置读写 ==========
 
-/** 读取仓库配置（自动补齐默认值） */
+/**
+ * 读取仓库配置：打包默认值 ⊕ 本机覆盖
+ * 本机没填过的字段（空字符串）会回退到 siteConfig 里的值，
+ * 这样“你在发布页只改了分支、没填仓库名”也不会把内置仓库覆盖成空。
+ */
 export function getRepoConfig() {
+  let saved = {}
   try {
     const raw = localStorage.getItem(CONFIG_KEY)
-    return { ...DEFAULT_REPO_CONFIG, ...(raw ? JSON.parse(raw) : {}) }
+    if (raw) {
+      const parsed = JSON.parse(raw) || {}
+      // 只保留真正填过的字段（false 是有效值，不能被过滤掉）
+      saved = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+    }
   } catch {
-    return { ...DEFAULT_REPO_CONFIG }
+    saved = {}
   }
+  return { ...DEFAULT_REPO_CONFIG, ...saved }
 }
 
 /** 保存仓库配置 */
@@ -134,6 +156,16 @@ export function bodyUrl(file, cfg = getRepoConfig()) {
 /** 给用户看的仓库主页地址（发布中心里"打开仓库"按钮用） */
 export function repoWebUrl(cfg = getRepoConfig()) {
   return `https://github.com/${cfg.user}/${cfg.repo}/tree/${cfg.branch}/${cfg.dir}`
+}
+
+/**
+ * 直接落到「上传文件」页面，并且已经进到笔记目录里。
+ * GitHub 的上传页地址格式是 /upload/分支/目录，必须是这个；
+ * 在 tree 地址后面加 ?files= 是无效的，会把你留在仓库首页，
+ * 结果文件全传到仓库根目录，前端按 notes/index.json 就找不到。
+ */
+export function uploadWebUrl(cfg = getRepoConfig()) {
+  return `https://github.com/${cfg.user}/${cfg.repo}/upload/${cfg.branch}/${cfg.dir}`
 }
 
 // ========== 网络请求 ==========

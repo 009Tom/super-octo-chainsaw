@@ -155,10 +155,18 @@ export async function downloadFiles(files, gap = 350) {
   if (files.length > 1) await new Promise((r) => setTimeout(r, gap * files.length))
 }
 
-/** 生成一次上传所需的全部文件（.md 若干 + index.json） */
-export function buildBundle(notes) {
+/**
+ * 生成一次上传所需的全部文件（.md 若干 + index.json）
+ *
+ * 为什么要拆成两个参数：index.json 是「线上应该有哪些笔记」的完整清单，
+ * 网站列表整个靠它。如果只用本次勾选的笔记生成清单，传上去就会把
+ * 之前已发布、这次没被选中的笔记全部挤掉（它们从网站上消失）。
+ * @param {Array} notes    本次要上传正文的笔记（生成 .md 文件）
+ * @param {Array} allNotes 线上最终应该存在的全部笔记（生成 index.json），缺省 = notes
+ */
+export function buildBundle(notes, allNotes = notes) {
   const files = notes.map((n) => ({ name: `${slugify(n)}.md`, text: toMarkdown(n), type: 'text/markdown' }))
-  files.push({ name: 'index.json', text: buildIndexJson(notes), type: 'application/json' })
+  files.push({ name: 'index.json', text: buildIndexJson(allNotes), type: 'application/json' })
   return files
 }
 
@@ -166,8 +174,8 @@ export function buildBundle(notes) {
  * 把整个发布包拼成一段纯文本（一次下载/复制，避免浏览器拦截多文件）
  * 每段前面有 ===== 文件名 ===== 标记，方便对照着在 GitHub 上新建文件
  */
-export function bundleAsText(notes) {
-  return buildBundle(notes)
+export function bundleAsText(notes, allNotes = notes) {
+  return buildBundle(notes, allNotes)
     .map((f) => `===== ${f.name} =====\n${f.text}`)
     .join('\n\n')
 }
