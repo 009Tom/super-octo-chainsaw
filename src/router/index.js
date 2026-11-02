@@ -44,6 +44,13 @@ const routes = [
     meta: { title: '开发者工具箱' }
   },
   {
+    // 发布中心：把本地草稿导出成文件，上传到 GitHub 仓库当“伪后台”
+    path: '/publish',
+    name: 'publish',
+    component: () => import('../views/PublishView.vue'),
+    meta: { title: '发布中心' }
+  },
+  {
     // 旧地址兼容：/about 重定向到工具箱
     path: '/about',
     redirect: '/tools'
@@ -68,8 +75,8 @@ const router = createRouter({
 // 全局前置守卫：动态修改浏览器标签页标题
 router.beforeEach((to) => {
   document.title = to.meta.title
-    ? `${to.meta.title} | 学习笔记`
-    : '学习笔记'
+    ? `${to.meta.title} | 源码印记`
+    : '源码印记'
 })
 
 export default router

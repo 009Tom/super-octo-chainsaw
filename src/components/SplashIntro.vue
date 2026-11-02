@@ -17,14 +17,23 @@
              style="background: radial-gradient(circle, rgba(94,234,212,.14), transparent 65%)"></div>
       </div>
 
-      <!-- 中央内容：粒子会在 logoSlot 的位置汇聚成图形 -->
+      <!-- 中央内容：粒子会在 logoSlot 的位置汇聚成站标图形 -->
       <div class="relative h-full flex flex-col items-center justify-center px-6 select-none pointer-events-none">
-        <!-- 汇聚落点占位（尺寸决定 logo 大小，手机上自动缩小） -->
-        <div ref="logoSlot" class="w-[min(60vw,230px)] h-[min(30vw,116px)]"></div>
+        <!-- 汇聚落点占位（正方形，尺寸决定图形大小，手机上自动缩小） -->
+        <div class="relative">
+          <div ref="logoSlot" class="w-[min(56vw,184px)] h-[min(56vw,184px)]"></div>
+          <!-- 粒子聚到位后，矢量站标淡入叠在同一位置，像"凝固成形" -->
+          <BrandMark
+            size="min(56vw,184px)"
+            :plate="false"
+            class="absolute inset-0 m-auto splash-mark"
+            :class="{ on: stage >= 2 }"
+          />
+        </div>
 
         <!-- 站名：遮罩逐行揭开 -->
         <div class="mt-5 overflow-hidden">
-          <h1 class="splash-title" :class="{ on: stage >= 2 }">学习笔记 Lab</h1>
+          <h1 class="splash-title" :class="{ on: stage >= 2 }">源码印记</h1>
         </div>
 
         <!-- 副标题：上浮淡入 -->
@@ -65,6 +74,7 @@
 // SplashIntro.vue - 开屏动画（本次会话只播一次）
 // 与全站设计分层一致：这里属于"开屏层"，播完即销毁 Canvas 与 rAF，不影响正文性能
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import BrandMark from './BrandMark.vue'
 
 const visible = ref(false)
 const canvasEl = ref(null)
@@ -146,40 +156,92 @@ function drawRain(alpha) {
 }
 
 /**
- * 在离屏画布上写出 "</>"，采样不透明像素作为粒子目标点
- * 用 DOM 占位元素的位置/尺寸定位，天然适配手机与电脑
+ * 粒子目标点：采样站标图形「源码印记」的几何形状（不再是文字）
+ * 和 favicon.svg / BrandMark.vue 是同一套坐标：三片旋转 45°、纵向压扁 0.56 的圆角板，
+ * 沿对角从左上往右下层叠；顶板中央再用 destination-out 打一个凹槽（印记）。
+ * 先把形状画到离屏画布，再逐像素取不透明点，配合 DOM 占位元素的矩形定位，手机/电脑天然自适应
  */
+const SLABS = [
+  { cx: 50, cy: 84, hw: 21, th: 6 },
+  { cx: 64, cy: 62, hw: 19, th: 5.5 },
+  { cx: 78, cy: 40, hw: 16.5, th: 5 }
+]
+
+/** 在 128 设计稿坐标里画一片板：先旋转 45° 再纵向压扁，就是轴测视角的一块平板 */
+function drawSlab(c, cx, cy, hw) {
+  c.save()
+  c.translate(cx, cy)
+  c.scale(1, 0.56)
+  c.rotate(Math.PI / 4)
+  roundRect(c, -hw, -hw, hw * 2, hw * 2, hw * 0.62)
+  c.fill()
+  c.restore()
+}
+
+/** roundRect 兼容包装：老浏览器没有这个 API 就手动画圆角 */
+function roundRect(c, x, y, w, h, r) {
+  const rad = Math.min(r, w / 2, h / 2)
+  c.beginPath()
+  if (typeof c.roundRect === 'function') {
+    c.roundRect(x, y, w, h, rad)
+    return
+  }
+  c.moveTo(x + rad, y)
+  c.arcTo(x + w, y, x + w, y + h, rad)
+  c.arcTo(x + w, y + h, x, y + h, rad)
+  c.arcTo(x, y + h, x, y, rad)
+  c.arcTo(x, y, x + w, y, rad)
+  c.closePath()
+}
+
 function sampleTargets() {
   const rect = logoSlot.value.getBoundingClientRect()
   const cw = Math.max(60, Math.floor(rect.width))
-  const chh = Math.max(30, Math.floor(rect.height))
+  const chh = Math.max(60, Math.floor(rect.height))
 
   const off = document.createElement('canvas')
   off.width = cw
   off.height = chh
   const octx = off.getContext('2d', { willReadFrequently: true })
+
+  // 128 设计稿 → 实际像素（取短边等比缩放，图形居中）
+  const s = Math.min(cw, chh) / 128
+  octx.save()
+  octx.translate((cw - 128 * s) / 2, (chh - 128 * s) / 2)
+  octx.scale(s, s)
+  // 与 SVG 里那组 transform 一致（整组放大 1.1 并下移 4），保证粒子形状和定版站标完全重合
+  octx.translate(64, 68)
+  octx.scale(1.1, 1.1)
+  octx.translate(-64, -64)
   octx.fillStyle = '#fff'
-  octx.font = `bold ${Math.floor(chh * 0.82)}px ui-monospace, Menlo, Consolas, monospace`
-  octx.textAlign = 'center'
-  octx.textBaseline = 'middle'
-  octx.fillText('</>', cw / 2, chh / 2)
+  for (const p of SLABS) {
+    drawSlab(octx, p.cx, p.cy + p.th, p.hw) // 侧壁（下移几像素 = 板的厚度）
+    drawSlab(octx, p.cx, p.cy, p.hw) // 顶面
+  }
+  // 顶板正中的凹槽：擦掉，让粒子围出一圈刻痕
+  octx.globalCompositeOperation = 'destination-out'
+  drawSlab(octx, 78, 40, 6)
+  octx.globalCompositeOperation = 'source-over'
+  octx.restore()
 
   const data = octx.getImageData(0, 0, cw, chh).data
   const pts = []
-  let gap = 3
+  const gap = 3
   for (let y = 0; y < chh; y += gap) {
     for (let x = 0; x < cw; x += gap) {
       if (data[(y * cw + x) * 4 + 3] > 120) pts.push([rect.left + x, rect.top + y])
     }
   }
-  // 点太多时抽稀，保证手机帧率
-  while (pts.length > 340) {
-    for (let i = pts.length - 1; i >= 0; i -= 2) pts.splice(i, 1)
-  }
-  return pts
+  // 点太多就等距抽稀（手机上更轻，且抽的是整形的均匀采样，不会只剩半边）
+  const max = window.innerWidth < 520 ? 300 : 430
+  if (pts.length <= max) return pts
+  const kept = []
+  const step = pts.length / max
+  for (let i = 0; i < max; i++) kept.push(pts[Math.floor(i * step)])
+  return kept
 }
 
-/** 生成粒子：目标点来自字形采样，起点铺满全屏 */
+/** 生成粒子：目标点来自站标图形采样，起点铺满全屏 */
 function seedParts() {
   parts.length = 0
   const pts = sampleTargets()
@@ -232,7 +294,7 @@ function frame(now) {
   const rainAlpha = t < T.born ? 0.5 : Math.max(0, 0.5 - (t - T.born) / 600)
   if (rainAlpha > 0.01) drawRain(rainAlpha)
 
-  // 第二幕起：粒子飞向字形
+  // 第二幕起：粒子飞向站标图形
   if (t >= T.born) {
     for (const p of parts) {
       if (t < T.born + p.delay) {
@@ -349,6 +411,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 站标定版：粒子汇聚完成后淡入，从略大收到原尺寸，像“凝固成形” */
+.splash-mark {
+  opacity: 0;
+  transform: scale(1.1) translateY(8px);
+  filter: drop-shadow(0 16px 34px rgba(56, 132, 255, 0.35));
+  transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.splash-mark.on {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
 /* 站名：被父级 overflow-hidden 挡住，用 mask-up 从下方揭开 */
 .splash-title {
   font-size: clamp(26px, 7.4vw, 46px);
@@ -390,6 +464,10 @@ onBeforeUnmount(() => {
   .splash-leave-active {
     transition: opacity 0.2s ease;
     clip-path: none;
+  }
+  .splash-mark {
+    transform: none;
+    transition: opacity 0.2s ease;
   }
 }
 </style>

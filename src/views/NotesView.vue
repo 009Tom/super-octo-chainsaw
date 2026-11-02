@@ -40,7 +40,44 @@
           >{{ catIcon[cat] }} {{ cat }}</button>
         </div>
       </div>
+
+      <!-- ===== 数据源切换：已发布（GitHub）/ 本地草稿 ===== -->
+      <div v-if="repoReady" class="flex items-center gap-3 flex-wrap mt-4">
+        <div class="inline-flex p-1 rounded-xl bg-ink-100">
+          <button
+            class="min-h-[34px] px-3 rounded-lg text-[13px] font-medium transition-colors"
+            :class="source === 'published' ? 'bg-white text-primary shadow-sm' : 'text-ink-500'"
+            @click="source = 'published'"
+          >🌐 已发布 {{ published.length }}</button>
+          <button
+            class="min-h-[34px] px-3 rounded-lg text-[13px] font-medium transition-colors"
+            :class="source === 'draft' ? 'bg-white text-primary shadow-sm' : 'text-ink-500'"
+            @click="source = 'draft'"
+          >📝 本地草稿 {{ draftCount }}</button>
+        </div>
+        <span v-if="source === 'published' && pub.updated" class="text-xs text-ink-400">
+          清单更新于 {{ formatDate(pub.updated) }}
+        </span>
+        <button v-if="source === 'published'" class="text-xs text-ink-400 underline" @click="loadPublished(true)">
+          强制刷新
+        </button>
+      </div>
+      <p v-else class="mt-4 text-[13px] text-ink-500">
+        这里显示的是这台设备上的本地草稿。想让大家都能看，去
+        <RouterLink to="/publish" class="text-primary underline">发布中心</RouterLink> 配置 GitHub 仓库。
+      </p>
     </header>
+
+    <!-- 读取状态：已发布列表是异步拉的，必须有加载态与失败提示，不能白屏 -->
+    <p v-if="showLoading" class="card p-4 mb-4 text-sm text-ink-500">正在从 GitHub 读取已发布笔记…</p>
+    <div
+      v-else-if="source === 'published' && pub.error"
+      class="mb-4 p-3 rounded-xl border bg-amber-50 border-amber-200 text-[13px] text-amber-900"
+    >
+      读取失败：{{ pub.error }}
+      <button class="underline ml-1" @click="loadPublished(true)">重试</button>
+      <span v-if="published.length">（下面显示的是上次成功读取的结果）</span>
+    </div>
 
     <!-- ===== 笔记卡片列表（筛选变化时只做淡入淡出，不缩放不位移） ===== -->
     <TransitionGroup
@@ -52,21 +89,27 @@
     </TransitionGroup>
 
     <!-- 空状态 -->
-    <div v-if="filteredNotes.length === 0" class="card p-10 text-center mt-2">
+    <div v-if="filteredNotes.length === 0 && !showLoading" class="card p-10 text-center mt-2">
       <p class="text-4xl mb-2" aria-hidden="true">🗒️</p>
       <p class="text-ink-500">没有找到符合条件的笔记</p>
-      <p class="text-ink-400 text-sm mt-1">换个关键词或分类试试？</p>
-      <RouterLink to="/write" class="btn btn-primary mt-5">✍️ 写一篇新的</RouterLink>
+      <p class="text-ink-400 text-sm mt-1">
+        {{ source === 'published' ? '换个关键词或分类，或去发布中心把草稿传上去' : '换个关键词或分类试试？' }}
+      </p>
+      <RouterLink :to="source === 'published' ? '/publish' : '/write'" class="btn btn-primary mt-5">
+        {{ source === 'published' ? '📤 去发布中心' : '✍️ 写一篇新的' }}
+      </RouterLink>
     </div>
   </div>
 </template>
 
 <script setup>
 // NotesView.vue - 笔记列表页逻辑
+// 双数据源：已发布（从 GitHub 仓库的 index.json 读）+ 本地草稿（localStorage）
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NoteCard from '../components/NoteCard.vue'
-import { getAllNotes, CATEGORIES } from '../utils/storage'
+import { getAllNotes, CATEGORIES, formatDate } from '../utils/storage'
+import { isRepoReady, fetchPublishedNotes, noteExcerpt } from '../utils/repo'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,21 +121,49 @@ const activeCategory = ref(route.query.category || '全部') // 当前分类（�
 // 分类按钮上的小图标（纯粹为了好看）
 const catIcon = { 全部: '🗄️', 前端: '🎨', 后端: '⚙️', 算法: '🧮', 工具: '🔧', AI: '🤖' }
 
-// 同时监听搜索和分类，从 localStorage 取数据后在前端过滤
+// ===== 已发布数据源 =====
+const repoReady = isRepoReady()
+const source = ref(repoReady ? 'published' : 'draft')
+const published = ref([])
+const draftCount = computed(() => getAllNotes().length)
+const pub = ref({ loading: false, error: '', updated: '' })
+const showLoading = computed(() => source.value === 'published' && pub.value.loading && !published.value.length)
+
+async function loadPublished(force = false) {
+  pub.value = { ...pub.value, loading: true, error: '' }
+  const r = await fetchPublishedNotes(force)
+  if (r.ok) {
+    published.value = r.notes
+    pub.value = { loading: false, error: '', updated: r.updated || '' }
+  } else {
+    // 失败时保留上一次的结果，只把错误显示出来
+    published.value = r.notes || published.value
+    pub.value = { loading: false, error: r.error || '未知错误', updated: pub.value.updated }
+  }
+}
+
+if (repoReady) loadPublished()
+
+// 当前数据源的全量列表
+const baseNotes = computed(() =>
+  source.value === 'published' ? published.value : getAllNotes()
+)
+
+// 同时监听搜索和分类，在前端过滤
 // （数据量小，直接全量过滤即可，无需后端分页）
 const filteredNotes = computed(() => {
-  let notes = getAllNotes()
+  let notes = [...baseNotes.value]
   // 分类筛选
   if (activeCategory.value !== '全部') {
     notes = notes.filter((n) => n.category === activeCategory.value)
   }
-  // 关键词筛选（标题 / 正文 / 标签，忽略大小写）
+  // 关键词筛选（标题 / 正文或摘要 / 标签，忽略大小写）
   const k = keyword.value.trim().toLowerCase()
   if (k) {
     notes = notes.filter(
       (n) =>
         n.title.toLowerCase().includes(k) ||
-        n.content.toLowerCase().includes(k) ||
+        (n.content || noteExcerpt(n, 9999)).toLowerCase().includes(k) ||
         (n.tags || []).some((t) => t.toLowerCase().includes(k))
     )
   }

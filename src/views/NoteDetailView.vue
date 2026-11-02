@@ -4,7 +4,14 @@
     <!-- ===== 顶部操作栏：手机上也能轻松点（44px 触摸区） ===== -->
     <div class="flex items-center justify-between gap-2 mb-4">
       <button class="btn btn-soft btn-sm" @click="goBack">← 返回列表</button>
-      <button class="btn btn-danger btn-sm" @click="handleDelete">🗑 删除</button>
+      <!-- 已发布的笔记不在本地，改和删都要回 GitHub 仓库 -->
+      <div v-if="isPublished" class="flex items-center gap-2 min-w-0">
+        <span class="badge shrink-0">🌐 GitHub</span>
+        <a v-if="repoReady" :href="editUrl" target="_blank" rel="noopener" class="btn btn-soft btn-sm shrink-0">
+          在 GitHub 上改
+        </a>
+      </div>
+      <button v-else class="btn btn-danger btn-sm" @click="handleDelete">🗑 删除</button>
     </div>
 
     <!-- ===== 文章卡片：不透明白底，把背景动效完全挡住 ===== -->
@@ -25,14 +32,27 @@
       </div>
 
       <!-- ===== Markdown 渲染区域 ===== -->
-      <!-- v-html 插入的是自己本地生成的内容（代码块已经过 highlight.js 转义），风险可控 -->
-      <div class="markdown-body" v-html="renderedHtml"></div>
+      <p v-if="bodyLoading" class="text-sm text-ink-500 py-6">正在从 GitHub 拉取正文…</p>
+      <div v-else-if="bodyError"
+           class="p-3 rounded-xl border bg-amber-50 border-amber-200 text-[13px] text-amber-900">
+        正文加载失败：{{ bodyError }}
+        <button class="underline ml-1" @click="resolveAndLoad">重试</button>
+      </div>
+      <!-- v-html 的内容来自本地草稿或你自己的仓库（代码块已经过 highlight.js 转义），风险可控 -->
+      <div v-else class="markdown-body" v-html="renderedHtml"></div>
     </article>
 
     <!-- 底部操作：再读一篇的入口 -->
     <div class="flex items-center justify-between mt-5 gap-3">
       <RouterLink to="/notes" class="btn btn-soft btn-sm">← 回列表选下一篇</RouterLink>
       <RouterLink to="/write" class="btn btn-primary btn-sm">✍️ 写新笔记</RouterLink>
+    </div>
+  </div>
+
+  <!-- 已发布笔记需要先拉清单，期间不算“不存在” -->
+  <div v-else-if="resolving" class="page-wrap">
+    <div class="card p-10 text-center">
+      <p class="text-sm text-ink-500">正在从 GitHub 读取…</p>
     </div>
   </div>
 
@@ -56,19 +76,69 @@
 
 <script setup>
 // NoteDetailView.vue - 详情页逻辑
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+// 两种来源：本地草稿（id = note-xxx）与已发布笔记（id = pub:xxx，正文从 GitHub 拉）
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getNoteById, deleteNote, formatDate } from '../utils/storage'
 import { renderMarkdown } from '../utils/markdown'
+import { isRepoReady, fetchPublishedNotes, fetchPublishedBody, repoWebUrl } from '../utils/repo'
 
 const route = useRoute()
 const router = useRouter()
 
-// 根据 URL 参数 id 查找笔记
-const note = computed(() => getNoteById(route.params.id))
+const repoReady = isRepoReady()
+const isPublished = computed(() => String(route.params.id).startsWith('pub:'))
+
+// 本地笔记同步取；已发布笔记要先拉清单，所以是响应式变量
+const localNote = computed(() => (isPublished.value ? null : getNoteById(route.params.id)))
+const pubNote = ref(null)
+const note = computed(() => localNote.value || pubNote.value)
+
+const body = ref('')                 // 已发布笔记的 Markdown 正文
+const bodyLoading = ref(false)
+const bodyError = ref('')
+const resolving = ref(false)         // 正在拉清单且还没有笔记对象
+
+// 指向仓库里那个 .md 文件，点了就能在 GitHub 上直接编辑
+const editUrl = computed(() =>
+  pubNote.value ? `${repoWebUrl()}/${pubNote.value.file}` : repoWebUrl()
+)
+
+/** 解析并加载当前 URL 对应的笔记 */
+async function resolveAndLoad() {
+  pubNote.value = null
+  body.value = ''
+  bodyError.value = ''
+  if (!isPublished.value) return
+  if (!repoReady) {
+    bodyError.value = '这台设备还没有配置 GitHub 仓库'
+    return
+  }
+
+  resolving.value = true
+  bodyLoading.value = true
+  const list = await fetchPublishedNotes()
+  const found = (list.notes || []).find((n) => n.id === route.params.id)
+  pubNote.value = found || null
+  resolving.value = false
+  if (!found) {
+    bodyLoading.value = false
+    bodyError.value = '在清单里找不到这篇（可能已改名或删除）'
+    return
+  }
+
+  const r = await fetchPublishedBody(found)
+  bodyLoading.value = false
+  if (r.ok) body.value = r.content
+  else bodyError.value = r.error
+}
+
+watch(() => route.params.id, resolveAndLoad, { immediate: true })
 
 // 把 Markdown 转成 HTML（含代码高亮）
-const renderedHtml = computed(() => renderMarkdown(note.value?.content || ''))
+const renderedHtml = computed(() =>
+  renderMarkdown(isPublished.value ? body.value : note.value?.content || '')
+)
 
 // "回到顶部"按钮只在页面下滚后出现
 const showTop = ref(false)

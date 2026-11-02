@@ -5,13 +5,11 @@
     :class="scrolled ? 'border-ink-200' : 'border-transparent'"
   >
     <nav class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-      <!-- Logo：实色方块，无动画 -->
+      <!-- Logo：站标图形「源码印记」，深色底板 + 层叠玻璃板，无字母无代码符号 -->
       <RouterLink to="/" class="flex items-center gap-2.5 shrink-0">
-        <span class="w-9 h-9 rounded-xl bg-primary text-white font-bold text-base flex items-center justify-center">
-          &lt;/&gt;
-        </span>
-        <span class="hidden xs:block font-bold text-lg text-ink-900 leading-none">
-          学习笔记 <span class="text-primary">Lab</span>
+        <BrandMark :size="36" />
+        <span class="hidden xs:block font-bold text-lg text-ink-900 leading-none tracking-tight">
+          源码<span class="text-primary">印记</span>
         </span>
       </RouterLink>
 
@@ -21,14 +19,14 @@
           v-for="item in menuItems"
           :key="item.path"
           :to="item.path"
-          class="relative px-3.5 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
+          class="relative px-3 xl:px-3.5 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
           :class="isActive(item.path) ? 'text-primary' : 'text-ink-500 hover:text-ink-900'"
         >
           {{ item.name }}
           <!-- 激活下划线：实色，静态 -->
           <span
             v-if="isActive(item.path)"
-            class="absolute left-3.5 right-3.5 -bottom-0.5 h-[2px] rounded-full bg-primary"
+            class="absolute left-3 right-3 xl:left-3.5 xl:right-3.5 -bottom-0.5 h-[2px] rounded-full bg-primary"
           ></span>
         </RouterLink>
 
@@ -104,17 +102,19 @@
 // 桌面：横向菜单；手机：右侧抽屉 + 遮罩。内容层保持静态，切换路由后自动收起
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import BrandMark from './BrandMark.vue'
 
 const route = useRoute()
 const menuOpen = ref(false)
 const scrolled = ref(false)
 
-// 导航菜单配置（"关于我"已换成开发者工具箱）
+// 导航菜单配置（“关于我”已换成开发者工具箱；“发布”是把草稿导出到 GitHub 的后台入口）
 const menuItems = [
   { name: '首页', path: '/' },
   { name: '笔记列表', path: '/notes' },
   { name: 'AI 助手', path: '/chat' },
-  { name: '工具箱', path: '/tools' }
+  { name: '工具箱', path: '/tools' },
+  { name: '发布', path: '/publish' }
 ]
 
 /**
@@ -128,7 +128,7 @@ const isActive = computed(() => (path) =>
 // 手机上标题栏显示当前页面名，省掉一个 Logo 位置的拥挤
 const currentName = computed(() => {
   const hit = menuItems.find((m) => (m.path === '/' ? route.path === '/' : route.path.startsWith(m.path)))
-  return hit ? hit.name : '学习笔记'
+  return hit ? hit.name : '源码印记'
 })
 
 // 切换路由后自动关闭抽屉

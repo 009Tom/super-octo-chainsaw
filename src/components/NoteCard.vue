@@ -11,9 +11,13 @@
 
     <!-- 分类标签 + 日期 -->
     <div class="flex items-center justify-between gap-2 mb-2.5">
-      <span class="badge" :style="{ background: soft, color: accent }">
-        {{ note.category }}
-      </span>
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="badge" :style="{ background: soft, color: accent }">
+          {{ note.category }}
+        </span>
+        <!-- 来源标记：已发布（GitHub）/ 本地草稿 -->
+        <span v-if="note.source === 'published'" class="badge shrink-0">🌐 已发布</span>
+      </div>
       <span class="text-[11px] sm:text-xs text-ink-400 font-mono shrink-0">{{ formatDate(note.updatedAt) }}</span>
     </div>
 
@@ -59,8 +63,11 @@ const props = defineProps({
 
 const router = useRouter()
 
-// 摘要：去掉 Markdown 标记后取前 80 字
-const excerpt = computed(() => extractExcerpt(props.note.content, 80))
+// 摘要：本地笔记去 Markdown 标记后取前 80 字；
+// 已发布笔记列表阶段不拉正文，直接用清单里预先存好的 excerpt
+const excerpt = computed(() =>
+  props.note.content ? extractExcerpt(props.note.content, 80) : props.note.excerpt || ''
+)
 
 // 分类配色：文字/边框用足够深的色值，保证白底上可读（对比度 > 4.5:1）
 const PAIRS = {

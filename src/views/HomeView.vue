@@ -3,10 +3,13 @@
   <div class="page-wrap space-y-8">
     <!-- ===== Hero：只留站名与入口，不写个人信息 ===== -->
     <section class="card p-5 sm:p-8">
-      <p class="eyebrow">Learning Notes · Lab</p>
-      <h1 class="mt-2 text-2xl sm:text-4xl font-extrabold text-ink-900 leading-tight tracking-tight">
-        学习笔记 <span class="text-primary">Lab</span>
-      </h1>
+      <p class="eyebrow">Source Imprint</p>
+      <div class="mt-2 flex items-center gap-3">
+        <BrandMark :size="44" />
+        <h1 class="text-2xl sm:text-4xl font-extrabold text-ink-900 leading-tight tracking-tight">
+          源码<span class="text-primary">印记</span>
+        </h1>
+      </div>
       <p class="mt-2.5 text-sm sm:text-base text-ink-500 leading-relaxed max-w-2xl">
         笔记 · AI 助手 · 开发者工具箱。学到的东西写成 Markdown 存下来，随时翻出来复习。
       </p>
@@ -20,12 +23,19 @@
           <div class="text-[11px] sm:text-xs text-ink-500 mt-0.5">{{ stat.label }}</div>
         </div>
       </div>
+      <!-- 统计口径说明：避免误以为本地草稿别人也能看到 -->
+      <p class="mt-2 text-[11px] text-ink-400">
+        {{ noteSource === 'published'
+            ? '↑ 以上笔记数来自 GitHub 仓库的已发布内容'
+            : '↑ 以上笔记数只统计了这台设备的本地草稿，发布后才会公开' }}
+      </p>
 
       <!-- 入口按钮：主按钮实色蓝 + 白字，对比度足够 -->
       <div class="flex flex-wrap gap-2.5 mt-6">
         <RouterLink to="/notes" class="btn btn-primary">📚 浏览全部笔记</RouterLink>
         <RouterLink to="/chat" class="btn btn-primary">🤖 问问 AI 助手</RouterLink>
         <RouterLink to="/tools" class="btn btn-soft">🧰 开发者工具箱</RouterLink>
+        <RouterLink to="/publish" class="btn btn-soft">📤 发布中心</RouterLink>
         <button class="btn btn-ghost" @click="replaySplash">▶ 重放开屏动画</button>
       </div>
 
@@ -82,21 +92,35 @@
 
 <script setup>
 // HomeView.vue - 首页逻辑（统计 + 分类 + 最新笔记）
-import { computed, reactive } from 'vue'
+// 数据源：配了 GitHub 仓库就优先展示已发布笔记，否则用本地草稿
+import { computed, reactive, ref, onMounted } from 'vue'
 import NoteCard from '../components/NoteCard.vue'
+import BrandMark from '../components/BrandMark.vue'
 import { getAllNotes, CATEGORIES } from '../utils/storage'
+import { isRepoReady, fetchPublishedNotes } from '../utils/repo'
 import { TOOLS } from '../data/tools'
 
 const categories = CATEGORIES
 
-// 只取最新 6 篇（getAllNotes 已按更新时间倒序）
-const allNotes = getAllNotes()
-const latestNotes = computed(() => allNotes.slice(0, 6))
+// 只取最新 6 篇（两个数据源都已按更新时间倒序）
+const allNotes = ref(getAllNotes())
+const noteSource = ref('draft') // 'draft' | 'published'
+const latestNotes = computed(() => allNotes.value.slice(0, 6))
 
 /** 统计某分类下的笔记数量，显示在胶囊上 */
 function countOf(cat) {
-  return allNotes.filter((n) => n.category === cat).length
+  return allNotes.value.filter((n) => n.category === cat).length
 }
+
+onMounted(async () => {
+  if (!isRepoReady()) return
+  const r = await fetchPublishedNotes()
+  if (r.ok && r.notes.length) {
+    allNotes.value = r.notes
+    noteSource.value = 'published'
+    runCountUp() // 数字变了，重新跑一次计数
+  }
+})
 
 const catIcon = { 前端: '🎨', 后端: '⚙️', 算法: '🧮', 工具: '🔧', AI: '🤖' }
 
@@ -113,7 +137,7 @@ const stats = reactive([
 ])
 // 统计数字：笔记数与工具数从真实数据取，坚持天数为手写常量（想改直接改这里）
 const STREAK_DAYS = 128
-const targets = [allNotes.length, CATEGORIES.length, TOOLS.length, STREAK_DAYS]
+const targets = computed(() => [allNotes.value.length, CATEGORIES.length, TOOLS.length, STREAK_DAYS])
 
 /**
  * 数字增长动画：只在首屏一次、1.2s 结束。
@@ -121,7 +145,7 @@ const targets = [allNotes.length, CATEGORIES.length, TOOLS.length, STREAK_DAYS]
  */
 function runCountUp() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    stats.forEach((s, i) => { s.display.value = targets[i] })
+    stats.forEach((s, i) => { s.display.value = targets.value[i] })
     return
   }
   const start = performance.now()
@@ -129,7 +153,7 @@ function runCountUp() {
   function tick(now) {
     const p = Math.min((now - start) / duration, 1)
     const eased = 1 - Math.pow(1 - p, 3)
-    stats.forEach((s, i) => { s.display.value = Math.round(targets[i] * eased) })
+    stats.forEach((s, i) => { s.display.value = Math.round(targets.value[i] * eased) })
     if (p < 1) requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)

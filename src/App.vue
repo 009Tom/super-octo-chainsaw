@@ -40,7 +40,10 @@
   <!-- 页脚：静态，手机上留足点击区 -->
   <footer class="relative z-10 border-t border-ink-200 bg-white safe-b">
     <div class="max-w-6xl mx-auto px-4 py-6 flex flex-col xs:flex-row items-center justify-between gap-2 text-xs text-ink-400">
-      <span>学习笔记 Lab · 本地浏览器存储，无需登录</span>
+      <span class="flex items-center gap-2">
+        <BrandMark :size="18" />
+        <span>源码印记 · 本地浏览器存储，无需登录</span>
+      </span>
       <span class="font-mono">Vue 3 / Vite / Tailwind</span>
     </div>
   </footer>
@@ -53,6 +56,7 @@
 // App.vue - 根组件（全站特效层在这里挂载）
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Navbar from './components/Navbar.vue'
+import BrandMark from './components/BrandMark.vue'
 import FxField from './components/FxField.vue'
 import AuroraBackdrop from './components/AuroraBackdrop.vue'
 import SplashIntro from './components/SplashIntro.vue'
