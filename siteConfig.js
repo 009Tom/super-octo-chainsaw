@@ -18,7 +18,7 @@ export const SITE_REPO = {
   branch: 'main',
   // 笔记在仓库里的子目录。留空 '' = 文件直接放在仓库根目录。
   // 必须和仓库里的实际位置一致，否则网站会报 404 找不到清单。
-  dir: '',
+  dir: 'notes',
   indexFile: 'index.json',
   // 拉取通道：'direct' 直连 raw / 'jsdelivr' 国内 CDN / 'ghproxy' / 'api' GitHub API 兜底 / 'custom'
   // 实测结论（2026-10，国内网络）：raw 超时、jsDelivr 也拉不到，只有 gh-proxy 和 api.github.com 能通，
