@@ -1,0 +1,17 @@
+# .gitignore - Git 忽略规则
+# 注意：gitignore 里 # 只有顶格才算注释，写在规则行后面会被当成文件名的一部分，
+# 导致整条规则失效（注释必须单独占一行）
+
+# 依赖目录，体积大且可通过 npm install 恢复
+node_modules/
+# 构建产物（由 Cloudflare Pages 执行 npm run build 现场生成，不需要进仓库）
+dist/
+# 本地私有配置
+*.local
+.local/
+.DS_Store
+Thumbs.db
+# 各类编辑器/终端的本地缓存
+.vscode/
+.idea/
+.qoder/
