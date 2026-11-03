@@ -35,7 +35,7 @@
         <RouterLink to="/notes" class="btn btn-primary">📚 浏览全部笔记</RouterLink>
         <RouterLink to="/chat" class="btn btn-primary">🤖 问问 AI 助手</RouterLink>
         <RouterLink to="/tools" class="btn btn-soft">🧰 开发者工具箱</RouterLink>
-        <RouterLink to="/publish" class="btn btn-soft">📤 发布中心</RouterLink>
+        <RouterLink v-if="CAN_EDIT" to="/publish" class="btn btn-soft">📤 发布中心</RouterLink>
         <button class="btn btn-ghost" @click="replaySplash">▶ 重放开屏动画</button>
       </div>
 
@@ -84,7 +84,8 @@
       <div v-if="latestNotes.length === 0" class="card p-10 text-center">
         <div class="text-4xl mb-2" aria-hidden="true">🌱</div>
         <p class="text-ink-500">还没有笔记</p>
-        <RouterLink to="/write" class="btn btn-primary mt-4">去写第一篇 →</RouterLink>
+        <!-- 线上访客只能等作者发布，没有自己写的入口 -->
+        <RouterLink v-if="CAN_EDIT" to="/write" class="btn btn-primary mt-4">去写第一篇 →</RouterLink>
       </div>
     </section>
   </div>
@@ -99,6 +100,7 @@ import BrandMark from '../components/BrandMark.vue'
 import { getAllNotes, CATEGORIES } from '../utils/storage'
 import { isRepoReady, fetchPublishedNotes } from '../utils/repo'
 import { TOOLS } from '../data/tools'
+import { CAN_EDIT } from '../utils/authorMode'
 
 const categories = CATEGORIES
 

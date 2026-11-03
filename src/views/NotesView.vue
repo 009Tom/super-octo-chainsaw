@@ -42,7 +42,8 @@
       </div>
 
       <!-- ===== 数据源切换：已发布（GitHub）/ 本地草稿 ===== -->
-      <div v-if="repoReady" class="flex items-center gap-3 flex-wrap mt-4">
+      <!-- 数据源切换器只给作者看：访客不需要知道「本地草稿」这个概念 -->
+      <div v-if="CAN_EDIT && repoReady" class="flex items-center gap-3 flex-wrap mt-4">
         <div class="inline-flex p-1 rounded-xl bg-ink-100">
           <button
             class="min-h-[34px] px-3 rounded-lg text-[13px] font-medium transition-colors"
@@ -62,7 +63,7 @@
           强制刷新
         </button>
       </div>
-      <p v-else class="mt-4 text-[13px] text-ink-500">
+      <p v-else-if="CAN_EDIT" class="mt-4 text-[13px] text-ink-500">
         这里显示的是这台设备上的本地草稿。想让大家都能看，去
         <RouterLink to="/publish" class="text-primary underline">发布中心</RouterLink> 配置 GitHub 仓库。
       </p>
@@ -93,9 +94,12 @@
       <p class="text-4xl mb-2" aria-hidden="true">🗒️</p>
       <p class="text-ink-500">没有找到符合条件的笔记</p>
       <p class="text-ink-400 text-sm mt-1">
-        {{ source === 'published' ? '换个关键词或分类，或去发布中心把草稿传上去' : '换个关键词或分类试试？' }}
+        {{ source === 'published'
+            ? (CAN_EDIT ? '换个关键词或分类，或去发布中心把草稿传上去' : '换个关键词或分类试试')
+            : '换个关键词或分类试试？' }}
       </p>
-      <RouterLink :to="source === 'published' ? '/publish' : '/write'" class="btn btn-primary mt-5">
+      <!-- 访客没有写入与发布入口，空列表时不给按钮 -->
+      <RouterLink v-if="CAN_EDIT" :to="source === 'published' ? '/publish' : '/write'" class="btn btn-primary mt-5">
         {{ source === 'published' ? '📤 去发布中心' : '✍️ 写一篇新的' }}
       </RouterLink>
     </div>
@@ -110,6 +114,7 @@ import { useRoute, useRouter } from 'vue-router'
 import NoteCard from '../components/NoteCard.vue'
 import { getAllNotes, CATEGORIES, formatDate } from '../utils/storage'
 import { isRepoReady, fetchPublishedNotes, noteExcerpt } from '../utils/repo'
+import { CAN_EDIT } from '../utils/authorMode'
 
 const route = useRoute()
 const router = useRouter()

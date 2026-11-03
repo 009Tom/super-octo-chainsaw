@@ -23,12 +23,32 @@ const routes = [
     component: () => import('../views/NoteDetailView.vue'),
     meta: { title: '笔记详情' }
   },
-  {
-    path: '/write',
-    name: 'write',
-    component: () => import('../views/WriteView.vue'),
-    meta: { title: '写笔记' }
-  },
+  // ===== 写笔记 / 发布中心：只在本机开发环境注册，线上构建里不存在 =====
+  // 为什么按构建环境剥离，而不是只在界面上藏掉入口：
+  // 1) 这两个页面依赖本机 localStorage 里的草稿，线上打开永远是空列表，
+  //    对作者没用，却会把后台发布流程整个展示给访客。
+  // 2) import.meta.env.DEV 会被 Vite 打包时替换成 false，这个三元表达式随即被
+  //    死代码消除，WriteView / PublishView 连 chunk 都不会生成。访客访问
+  //    /write 或 /publish 会命中下面的兜底规则，静默回到首页。
+  // 3) 这里必须直接写 import.meta.env.DEV，不要改成从 utils/authorMode 导入的
+  //    CAN_EDIT：跨模块常量 Rollup 不保证能折叠，chunk 可能就剔不掉了。
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: '/write',
+          name: 'write',
+          component: () => import('../views/WriteView.vue'),
+          meta: { title: '写笔记' }
+        },
+        {
+          // 发布中心：把本地草稿导出成文件，上传到 GitHub 仓库当伪后台
+          path: '/publish',
+          name: 'publish',
+          component: () => import('../views/PublishView.vue'),
+          meta: { title: '发布中心' }
+        }
+      ]
+    : []),
   {
     // AI 学习助手（DeepSeek 对话）
     path: '/chat',
@@ -42,13 +62,6 @@ const routes = [
     name: 'tools',
     component: () => import('../views/ToolsView.vue'),
     meta: { title: '开发者工具箱' }
-  },
-  {
-    // 发布中心：把本地草稿导出成文件，上传到 GitHub 仓库当“伪后台”
-    path: '/publish',
-    name: 'publish',
-    component: () => import('../views/PublishView.vue'),
-    meta: { title: '发布中心' }
   },
   {
     // 旧地址兼容：/about 重定向到工具箱

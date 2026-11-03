@@ -30,7 +30,8 @@
           ></span>
         </RouterLink>
 
-        <RouterLink to="/write" class="btn btn-primary btn-sm ml-2">
+        <!-- 写笔记只在本机开发环境显示：线上是纯只读站，访客不该有写入入口 -->
+        <RouterLink v-if="CAN_EDIT" to="/write" class="btn btn-primary btn-sm ml-2">
           ✍️ 写笔记
         </RouterLink>
       </div>
@@ -87,7 +88,7 @@
           <span v-if="isActive(item.path)" class="w-1.5 h-1.5 rounded-full bg-primary"></span>
         </RouterLink>
 
-        <div class="mt-2 pt-3 border-t border-ink-200">
+        <div v-if="CAN_EDIT" class="mt-2 pt-3 border-t border-ink-200">
           <RouterLink to="/write" class="btn btn-primary w-full" @click="menuOpen = false">
             ✍️ 写笔记
           </RouterLink>
@@ -103,6 +104,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import BrandMark from './BrandMark.vue'
+import { CAN_EDIT } from '../utils/authorMode'
 
 const route = useRoute()
 const menuOpen = ref(false)
@@ -114,7 +116,8 @@ const menuItems = [
   { name: '笔记列表', path: '/notes' },
   { name: 'AI 助手', path: '/chat' },
   { name: '工具箱', path: '/tools' },
-  { name: '发布', path: '/publish' }
+  // 「发布」是作者自己的后台入口，路由在线上根本没注册，这里连带不显示
+  ...(CAN_EDIT ? [{ name: '发布', path: '/publish' }] : [])
 ]
 
 /**

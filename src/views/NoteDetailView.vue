@@ -8,7 +8,7 @@
       <div v-if="isPublished" class="flex items-center gap-2 min-w-0">
         <span class="badge shrink-0">🌐 GitHub</span>
         <a v-if="repoReady" :href="editUrl" target="_blank" rel="noopener" class="btn btn-soft btn-sm shrink-0">
-          在 GitHub 上改
+          {{ CAN_EDIT ? '在 GitHub 上改' : '在 GitHub 上查看' }}
         </a>
       </div>
       <button v-else class="btn btn-danger btn-sm" @click="handleDelete">🗑 删除</button>
@@ -45,7 +45,7 @@
     <!-- 底部操作：再读一篇的入口 -->
     <div class="flex items-center justify-between mt-5 gap-3">
       <RouterLink to="/notes" class="btn btn-soft btn-sm">← 回列表选下一篇</RouterLink>
-      <RouterLink to="/write" class="btn btn-primary btn-sm">✍️ 写新笔记</RouterLink>
+      <RouterLink v-if="CAN_EDIT" to="/write" class="btn btn-primary btn-sm">✍️ 写新笔记</RouterLink>
     </div>
   </div>
 
@@ -82,6 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { getNoteById, deleteNote, formatDate } from '../utils/storage'
 import { renderMarkdown } from '../utils/markdown'
 import { isRepoReady, fetchPublishedNotes, fetchPublishedBody, repoWebUrl } from '../utils/repo'
+import { CAN_EDIT } from '../utils/authorMode'
 
 const route = useRoute()
 const router = useRouter()
